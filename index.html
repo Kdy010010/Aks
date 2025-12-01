@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Cosmic Defense Mobile 🚀</title>
+  <title>Cosmic Defense – Enemy Healers & Hard Mode 🚀</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -164,7 +164,7 @@
       box-shadow: var(--border-glow);
       background: radial-gradient(circle at top, #141742 0, #030310 70%);
       width: 100%;
-      height: auto; /* 16:9 비율 캔버스가 폭에 맞게 자동 축소 */
+      height: auto;
       touch-action: none;
     }
 
@@ -335,7 +335,7 @@
     <div class="game-header">
       <div class="title">
         🚀 COSMIC DEFENSE
-        <span>모든 기기 대응 우주 디펜스</span>
+        <span>Enemy Healers & Hard Mode</span>
       </div>
       <div class="badge">PC · Tablet · Phone</div>
     </div>
@@ -360,16 +360,14 @@
       <button class="btn" id="startWaveBtn">▶ 다음 웨이브 시작</button>
     </div>
 
-    <!-- 고정 해상도 캔버스, CSS로 반응형 -->
     <canvas id="game" width="960" height="540"></canvas>
 
-    <!-- 타워 선택 바 -->
     <div class="tower-bar" id="towerBar"></div>
 
     <div class="bottom-bar">
       <div class="hint">
         <div class="pill">🖱/👆 <b>캔버스 탭</b> : 선택된 타워 설치</div>
-        <div class="pill"><span class="key">1~6</span> 타워 변경</div>
+        <div class="pill"><span class="key">1~7</span> 타워 변경 (7 = 힐)</div>
         <div class="pill"><span class="key">R</span> 게임 재시작</div>
       </div>
       <div class="status-message" id="statusMessage"></div>
@@ -389,16 +387,16 @@
     const statusMessage = document.getElementById("statusMessage");
     const towerBar = document.getElementById("towerBar");
 
-    const WIDTH = canvas.width;   // 논리 좌표 960
-    const HEIGHT = canvas.height; // 논리 좌표 540
+    const WIDTH = canvas.width;
+    const HEIGHT = canvas.height;
     const TILE_SIZE = 60;
-    const COLS = Math.floor(WIDTH / TILE_SIZE);  // 16
-    const ROWS = Math.floor(HEIGHT / TILE_SIZE); // 9
+    const COLS = Math.floor(WIDTH / TILE_SIZE);
+    const ROWS = Math.floor(HEIGHT / TILE_SIZE);
 
     const INITIAL_MONEY = 200;
     const INITIAL_LIFE = 20;
 
-    // 타워 타입 정의 (6종)
+    // ====== 타워 타입 정의 (힐 타워 너프) ======
     const towerTypes = [
       {
         id: "laser",
@@ -415,6 +413,7 @@
         mode: "bullet",
         poisonDps: 0,
         poisonDuration: 0,
+        baseHp: 70,
         desc: "기본기 좋은 빠른 연사 타워"
       },
       {
@@ -432,6 +431,7 @@
         mode: "bullet",
         poisonDps: 0,
         poisonDuration: 0,
+        baseHp: 90,
         desc: "초장거리 고화력 저격 타워"
       },
       {
@@ -449,6 +449,7 @@
         mode: "bullet",
         poisonDps: 0,
         poisonDuration: 0,
+        baseHp: 100,
         desc: "범위 스플래시, 무리 처리 담당"
       },
       {
@@ -466,6 +467,7 @@
         mode: "bullet",
         poisonDps: 0,
         poisonDuration: 0,
+        baseHp: 80,
         desc: "적 이동속도 크게 감소시키는 디버프"
       },
       {
@@ -480,9 +482,10 @@
         splashRadius: 0,
         slowFactor: 1,
         slowDuration: 0,
-        mode: "pulse", // 충격파
+        mode: "pulse",
         poisonDps: 0,
         poisonDuration: 0,
+        baseHp: 110,
         desc: "원형 쇼크웨이브로 주변 적을 동시에 공격"
       },
       {
@@ -500,68 +503,155 @@
         mode: "bullet",
         poisonDps: 0.3,
         poisonDuration: 120,
+        baseHp: 75,
         desc: "독 디버프 적용, 지속 피해로 서서히 녹임"
+      },
+      {
+        id: "heal",
+        name: "힐링 타워",
+        hotkey: "7",
+        cost: 110,
+        baseRange: 120,     // 사거리 ↓
+        fireRate: 80,       // 더 느리게
+        baseDamage: 0,
+        bulletSpeed: 0,
+        splashRadius: 0,
+        slowFactor: 1,
+        slowDuration: 0,
+        mode: "heal",
+        poisonDps: 0,
+        poisonDuration: 0,
+        baseHp: 80,
+        healAmount: 4,      // 힐량 ↓
+        desc: "범위 내 아군 타워를 느리게 회복 (보조용)"
       }
     ];
 
-    // 적 타입 정의 (8종)
+    // ====== 적 타입 정의 (여러 타입 추가 + 힐러 적) ======
     const enemyConfigs = {
       normal: {
         name: "Normal Drone",
         color: "#ff62c9",
         hpFactor: 1.0,
         speedBase: 1.1,
-        speedGrow: 0.06
+        speedGrow: 0.06,
+        atkRange: 130,
+        atkRate: 70,
+        atkDamage: 6
       },
       fast: {
         name: "Striker",
         color: "#6af7ff",
-        hpFactor: 0.7,
+        hpFactor: 0.8,
         speedBase: 1.9,
-        speedGrow: 0.08
+        speedGrow: 0.08,
+        atkRange: 130,
+        atkRate: 55,
+        atkDamage: 5
       },
       tank: {
         name: "Juggernaut",
         color: "#ffb347",
-        hpFactor: 2.2,
+        hpFactor: 2.5,
         speedBase: 0.75,
-        speedGrow: 0.04
+        speedGrow: 0.04,
+        atkRange: 150,
+        atkRate: 80,
+        atkDamage: 12
       },
       swarm: {
         name: "Swarm",
         color: "#c6ff7a",
-        hpFactor: 0.45,
+        hpFactor: 0.55,
         speedBase: 1.5,
-        speedGrow: 0.07
+        speedGrow: 0.07,
+        atkRange: 100,
+        atkRate: 50,
+        atkDamage: 3
       },
       shield: {
         name: "Shielded",
         color: "#a38bff",
-        hpFactor: 1.6,
+        hpFactor: 1.7,
         speedBase: 1.0,
-        speedGrow: 0.05
+        speedGrow: 0.05,
+        atkRange: 140,
+        atkRate: 70,
+        atkDamage: 7
       },
       regen: {
         name: "Regenerator",
         color: "#7cf9c2",
-        hpFactor: 1.3,
+        hpFactor: 1.4,
         speedBase: 1.0,
         speedGrow: 0.05,
+        atkRange: 140,
+        atkRate: 65,
+        atkDamage: 6,
         regenFactor: 0.03
       },
       mini: {
         name: "Mini Drone",
         color: "#ffe082",
-        hpFactor: 0.35,
+        hpFactor: 0.45,
         speedBase: 1.9,
-        speedGrow: 0.07
+        speedGrow: 0.07,
+        atkRange: 100,
+        atkRate: 45,
+        atkDamage: 2
+      },
+      sniper: {
+        name: "Sniper Ship",
+        color: "#90caf9",
+        hpFactor: 0.7,
+        speedBase: 1.2,
+        speedGrow: 0.05,
+        atkRange: 230,
+        atkRate: 65,
+        atkDamage: 9
+      },
+      bomber: {
+        name: "Bomber",
+        color: "#ff867c",
+        hpFactor: 1.6,
+        speedBase: 1.0,
+        speedGrow: 0.05,
+        atkRange: 150,
+        atkRate: 70,
+        atkDamage: 10
+      },
+      brute: {
+        name: "Brute",
+        color: "#ffab91",
+        hpFactor: 2.8,
+        speedBase: 0.9,
+        speedGrow: 0.05,
+        atkRange: 140,
+        atkRate: 75,
+        atkDamage: 13
+      },
+      medic: {
+        name: "Medic Ship",
+        color: "#80cbc4",
+        hpFactor: 1.3,
+        speedBase: 1.1,
+        speedGrow: 0.05,
+        atkRange: 130,
+        atkRate: 75,
+        atkDamage: 3,
+        healRadius: 150,
+        healFactor: 0.08,   // 주변 적 힐 비율
+        healInterval: 45
       },
       boss: {
         name: "Boss Carrier",
         color: "#ff3b6b",
-        hpFactor: 8.0,
+        hpFactor: 8.5,
         speedBase: 0.6,
-        speedGrow: 0.05
+        speedGrow: 0.05,
+        atkRange: 200,
+        atkRate: 60,
+        atkDamage: 16
       }
     };
 
@@ -572,8 +662,9 @@
 
     let enemies = [];
     let towers = [];
-    let bullets = [];
-    let pulses = []; // 펄스 타워 이펙트
+    let bullets = [];      // 플레이어 탄
+    let pulses = [];       // 펄스/힐/적힐 이펙트
+    let enemyBullets = []; // 적 탄
 
     let wave = 0;
     let lives = INITIAL_LIFE;
@@ -591,10 +682,6 @@
     let selectedTowerIndex = 0;
 
     // ====== 유틸 ======
-    function rand(min, max) {
-      return Math.random() * (max - min) + min;
-    }
-
     function tileCenter(tx, ty) {
       return {
         x: tx * TILE_SIZE + TILE_SIZE / 2,
@@ -692,7 +779,7 @@
       setStatus(`"${type.name}" 선택 (비용 ${type.cost} ⚡)`, true, false);
     }
 
-    // ====== 웨이브 생성 ======
+    // ====== 웨이브 생성 (적 더 많고, 종류 다양) ======
     function createWave() {
       if (waveInProgress) return;
       if (gameOver) {
@@ -702,38 +789,43 @@
       wave++;
       waveDisplay.textContent = wave;
 
-      const baseCount = 6 + wave * 2;
+      const baseCount = 8 + wave * 3; // 적 숫자↑
       spawnQueue = [];
       let delay = 0;
 
       for (let i = 0; i < baseCount; i++) {
         let type;
 
-        // 웨이브에 따라 다양한 적 섞어서 등장
-        if (wave >= 8 && i % 10 === 0) type = "regen";
-        else if (wave >= 7 && i % 9 === 0) type = "shield";
+        if (wave >= 11 && i % 12 === 0) type = "medic";
+        else if (wave >= 10 && i % 10 === 0) type = "bomber";
+        else if (wave >= 9 && i % 9 === 0) type = "brute";
+        else if (wave >= 8 && i % 8 === 0) type = "shield";
+        else if (wave >= 7 && i % 7 === 0) type = "regen";
         else if (wave >= 6 && i % 6 === 0) type = "tank";
-        else if (wave >= 5 && i % 7 === 0) type = "swarm";
-        else if (wave >= 4 && i % 5 === 0) type = "fast";
+        else if (wave >= 5 && i % 5 === 0) type = "sniper";
+        else if (wave >= 4 && i % 4 === 0) type = "swarm";
+        else if (wave >= 3 && i % 3 === 0) type = "fast";
         else type = "normal";
 
         spawnQueue.push({ type, spawnTick: tick + delay });
-        delay += (type === "swarm" ? 25 : 45);
+        const cfg = enemyConfigs[type] || enemyConfigs.normal;
+        const spacing = (type === "swarm" ? 20 : 40);
+        delay += spacing;
       }
 
-      // 보스 유닛: 5의 배수 웨이브마다 1기 추가
+      // 보스
       if (wave % 5 === 0) {
-        spawnQueue.push({ type: "boss", spawnTick: tick + delay + 60 });
+        spawnQueue.push({ type: "boss", spawnTick: tick + delay + 80 });
       }
 
       waveInProgress = true;
-      setStatus(`Wave ${wave} 시작! 다양한 적이 몰려옵니다...`, true);
+      setStatus(`Wave ${wave} 시작! 적 힐러와 강력한 유닛들이 접근 중…`, true);
     }
 
     function spawnEnemy(type) {
       const cfg = enemyConfigs[type] || enemyConfigs.normal;
       const start = pathPoints[0];
-      const hpBase = 26 + wave * 4;
+      const hpBase = 45 + wave * 8;   // 전체 체력↑
       const hp = hpBase * (cfg.hpFactor || 1.0);
       const speed = (cfg.speedBase || 1.0) + wave * (cfg.speedGrow || 0.05);
 
@@ -755,7 +847,14 @@
         shieldMax: 0,
         poisonTimer: 0,
         poisonDps: 0,
-        regenFactor: cfg.regenFactor || 0
+        regenFactor: cfg.regenFactor || 0,
+        atkRange: cfg.atkRange || 120,
+        atkRate: cfg.atkRate || 70,
+        atkCooldown: 0,
+        atkDamage: cfg.atkDamage || 5,
+        healRadius: cfg.healRadius || 0,
+        healFactor: cfg.healFactor || 0,
+        healInterval: cfg.healInterval || 999
       };
 
       if (type === "shield") {
@@ -772,6 +871,7 @@
       towers = [];
       bullets = [];
       pulses = [];
+      enemyBullets = [];
       wave = 0;
       lives = INITIAL_LIFE;
       money = INITIAL_MONEY;
@@ -784,7 +884,7 @@
       moneyDisplay.textContent = money;
       waveDisplay.textContent = wave;
       enemyDisplay.textContent = "대기 중";
-      setStatus("타워를 설치하고 웨이브를 시작해 보세요 ✨", true, false);
+      setStatus("타워를 설치하고 웨이브를 시작해 보세요 ✨ (적 힐러/폭격기/스나이퍼 등장, 힐타워는 너프됨)", true, false);
 
       selectTowerType(0);
     }
@@ -826,7 +926,10 @@
         mode: typeCfg.mode,
         poisonDps: typeCfg.poisonDps,
         poisonDuration: typeCfg.poisonDuration,
-        spin: Math.random() * Math.PI * 2
+        spin: Math.random() * Math.PI * 2,
+        hp: typeCfg.baseHp,
+        maxHp: typeCfg.baseHp,
+        healAmount: typeCfg.healAmount || 0
       });
       cell.hasTower = true;
       money -= typeCfg.cost;
@@ -887,7 +990,6 @@
       handlePointerClick(e.clientX, e.clientY);
     });
 
-    // 터치 지원
     canvas.addEventListener("touchstart", (e) => {
       const t = e.touches[0];
       handlePointerClick(t.clientX, t.clientY);
@@ -912,7 +1014,7 @@
       if (e.key === "r" || e.key === "R") {
         resetGame();
       }
-      if (e.key >= "1" && e.key <= "6") {
+      if (e.key >= "1" && e.key <= "7") {
         const idx = parseInt(e.key, 10) - 1;
         if (idx >= 0 && idx < towerTypes.length) {
           selectTowerType(idx);
@@ -922,7 +1024,7 @@
 
     // ====== 업데이트 로직 ======
     function updateEnemies() {
-      // 스폰 큐
+      // 스폰
       if (waveInProgress && spawnQueue.length > 0) {
         while (spawnQueue.length > 0 && spawnQueue[0].spawnTick <= tick) {
           const next = spawnQueue.shift();
@@ -941,24 +1043,50 @@
           }
         }
 
-        // 독 데미지
+        // 독
         if (e.poisonTimer > 0 && e.poisonDps > 0) {
           e.poisonTimer--;
           e.hp -= e.poisonDps;
         }
 
-        // 실드 자연 회복
+        // 실드 회복
         if (e.type === "shield") {
           if (tick % 40 === 0 && e.shieldHp < e.shieldMax) {
             e.shieldHp = Math.min(e.shieldMax, e.shieldHp + e.maxHp * 0.05);
           }
         }
 
-        // 재생형 적
+        // 재생형
         if (e.regenFactor > 0 && tick % 35 === 0) {
           e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regenFactor);
         }
 
+        // 힐러 적 (Medic) – 주변 적 힐
+        if (e.type === "medic" && e.healRadius > 0 && e.healFactor > 0) {
+          if (tick % e.healInterval === 0) {
+            let healed = false;
+            for (const other of enemies) {
+              if (other === e) continue;
+              if (distance(e, other) <= e.healRadius) {
+                const before = other.hp;
+                other.hp = Math.min(other.maxHp, other.hp + other.maxHp * e.healFactor);
+                if (other.hp > before) healed = true;
+              }
+            }
+            if (healed) {
+              pulses.push({
+                x: e.x,
+                y: e.y,
+                r: 0,
+                maxR: e.healRadius * 0.8,
+                alpha: 0.9,
+                kind: "enemyHeal"
+              });
+            }
+          }
+        }
+
+        // 이동
         const from = pathPoints[e.pathIndex];
         const to = pathPoints[e.pathIndex + 1];
 
@@ -992,12 +1120,48 @@
         const ddy = target.y - base.y;
         e.x = base.x + ddx * e.progress;
         e.y = base.y + ddy * e.progress;
+
+        // 공격 쿨타임
+        if (e.atkCooldown > 0) e.atkCooldown--;
+
+        // 타워 공격 (탄환은 범위 피해)
+        if (towers.length > 0 && e.atkCooldown <= 0) {
+          let targetTower = null;
+          let minDist = Infinity;
+          for (const t of towers) {
+            const d = distance(e, t);
+            if (d < e.atkRange && d < minDist) {
+              minDist = d;
+              targetTower = t;
+            }
+          }
+          if (targetTower) {
+            let splash = 40;
+            if (e.type === "tank") splash = 65;
+            else if (e.type === "boss") splash = 85;
+            else if (e.type === "bomber") splash = 100;
+            else if (e.type === "mini") splash = 30;
+            else if (e.type === "sniper") splash = 35;
+            else if (e.type === "brute") splash = 70;
+
+            enemyBullets.push({
+              x: e.x,
+              y: e.y,
+              target: targetTower,
+              speed: 6.0,
+              damage: e.atkDamage,
+              fromType: e.type,
+              splashRadius: splash
+            });
+            e.atkCooldown = e.atkRate;
+          }
+        }
       }
 
       // 웨이브 완료 체크
       if (waveInProgress && spawnQueue.length === 0 && enemies.length === 0 && !gameOver) {
         waveInProgress = false;
-        const reward = 55 + wave * 15;
+        const reward = 60 + wave * 18;
         money += reward;
         moneyDisplay.textContent = Math.floor(money);
         setStatus(`Wave ${wave} 방어 성공! 보상 +${reward} ⚡`, true, false);
@@ -1012,7 +1176,35 @@
       for (const t of towers) {
         if (t.cooldown > 0) t.cooldown--;
 
-        // 범위 내 가장 가까운 적 찾기
+        // 힐 모드 (너프 버전)
+        if (t.mode === "heal") {
+          if (t.cooldown <= 0) {
+            let healedAny = false;
+            for (const other of towers) {
+              if (other === t) continue;
+              if (distance(t, other) <= t.range) {
+                const before = other.hp;
+                other.hp = Math.min(other.maxHp, other.hp + t.healAmount);
+                if (other.hp > before) healedAny = true;
+              }
+            }
+            if (healedAny) {
+              pulses.push({
+                x: t.x,
+                y: t.y,
+                r: 0,
+                maxR: t.range * 0.7,
+                alpha: 0.6,
+                kind: "heal"
+              });
+            }
+            t.cooldown = t.fireRate;
+          }
+          t.spin += 0.05;
+          continue;
+        }
+
+        // 공격 타워
         let target = null;
         let minDist = Infinity;
         for (const e of enemies) {
@@ -1025,7 +1217,6 @@
 
         if (t.mode === "pulse") {
           if (target && t.cooldown <= 0) {
-            // 충격파 데미지
             const radius = t.range * 0.9;
             for (const e of enemies) {
               if (distance(t, e) <= radius) {
@@ -1037,7 +1228,8 @@
               y: t.y,
               r: 0,
               maxR: radius,
-              alpha: 0.7
+              alpha: 0.7,
+              kind: "damage"
             });
             t.cooldown = t.fireRate;
           }
@@ -1086,6 +1278,7 @@
     }
 
     function updateBullets() {
+      // 플레이어 탄
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         if (!enemies.includes(b.target)) {
@@ -1114,7 +1307,7 @@
 
           bullets.splice(i, 1);
 
-          // 죽은 적 제거 + 보상
+          // 죽은 적 정리
           for (let j = enemies.length - 1; j >= 0; j--) {
             const e = enemies[j];
             if (e.hp <= 0) {
@@ -1122,6 +1315,47 @@
               const gain = 7 + wave * 2;
               money += gain;
               moneyDisplay.textContent = Math.floor(money);
+            }
+          }
+        }
+      }
+
+      // 적 탄 (범위 피해)
+      for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        const b = enemyBullets[i];
+        if (!towers.includes(b.target)) {
+          enemyBullets.splice(i, 1);
+          continue;
+        }
+
+        const dx = b.target.x - b.x;
+        const dy = b.target.y - b.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const vx = (dx / len) * b.speed;
+        const vy = (dy / len) * b.speed;
+        b.x += vx;
+        b.y += vy;
+
+        if (distance(b, b.target) < 10) {
+          // 범위 내 모든 타워에 피해
+          for (const t of towers) {
+            if (distance(b, t) <= (b.splashRadius || 0)) {
+              t.hp -= b.damage;
+            }
+          }
+          enemyBullets.splice(i, 1);
+
+          // 타워 파괴 정리
+          for (let j = towers.length - 1; j >= 0; j--) {
+            const t = towers[j];
+            if (t.hp <= 0) {
+              const tx = Math.floor(t.x / TILE_SIZE);
+              const ty = Math.floor(t.y / TILE_SIZE);
+              if (ty >= 0 && ty < ROWS && tx >= 0 && tx < COLS) {
+                grid[ty][tx].hasTower = false;
+              }
+              towers.splice(j, 1);
+              setStatus("타워가 파괴되었습니다!", false, true);
             }
           }
         }
@@ -1161,7 +1395,6 @@
     }
 
     function drawGrid() {
-      // 경로
       ctx.save();
       ctx.strokeStyle = "rgba(74, 242, 197, 0.6)";
       ctx.lineWidth = 20;
@@ -1178,7 +1411,6 @@
       ctx.stroke();
       ctx.restore();
 
-      // 그리드
       ctx.save();
       ctx.strokeStyle = "rgba(120, 140, 255, 0.25)";
       ctx.lineWidth = 0.6;
@@ -1205,10 +1437,9 @@
         ctx.save();
         ctx.translate(e.x, e.y);
 
-        let angle = 0;
         const from = pathPoints[e.pathIndex];
         const to = pathPoints[e.pathIndex + 1] || from;
-        angle = Math.atan2(to.y - from.y, to.x - from.x);
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
         ctx.rotate(angle);
 
         const size = e.type === "boss" ? 26 : (e.type === "mini" ? 10 : 16);
@@ -1299,6 +1530,10 @@
           grad.addColorStop(0, "#e8f5e9");
           grad.addColorStop(0.5, "#81c784");
           grad.addColorStop(1, "#1b5e20");
+        } else if (t.typeId === "heal") {
+          grad.addColorStop(0, "#e0fff4");
+          grad.addColorStop(0.5, "#66ffc4");
+          grad.addColorStop(1, "#184636");
         } else {
           grad.addColorStop(0, "#4af2c5");
           grad.addColorStop(0.6, "#1d8cff");
@@ -1347,6 +1582,12 @@
           ctx.arc(0, -8, 6, 0, Math.PI * 2);
           ctx.fillStyle = "#a5d6a7";
           ctx.fill();
+        } else if (t.typeId === "heal") {
+          ctx.beginPath();
+          ctx.rect(-3, -10, 6, 20);
+          ctx.rect(-10, -3, 20, 6);
+          ctx.fillStyle = "#e0fff4";
+          ctx.fill();
         } else {
           ctx.beginPath();
           ctx.rect(-3, -16, 6, 16);
@@ -1355,10 +1596,20 @@
         }
 
         ctx.restore();
+
+        // 타워 HP 바
+        const barW = 30;
+        const barH = 4;
+        const hpRatio = t.hp / t.maxHp;
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(t.x - barW / 2, t.y + 20, barW, barH);
+        ctx.fillStyle = hpRatio > 0.4 ? "#4af2c5" : "#ff4b81";
+        ctx.fillRect(t.x - barW / 2, t.y + 20, barW * Math.max(0, hpRatio), barH);
       }
     }
 
     function drawBullets() {
+      // 플레이어 탄
       ctx.save();
       ctx.lineWidth = 2;
       ctx.shadowColor = "#f8ffff";
@@ -1380,6 +1631,23 @@
         ctx.stroke();
       }
       ctx.restore();
+
+      // 적 탄
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "#ff6b6b";
+      ctx.shadowBlur = 12;
+      for (const b of enemyBullets) {
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(
+          b.x + (b.target.x - b.x) * 0.3,
+          b.y + (b.target.y - b.y) * 0.3
+        );
+        ctx.strokeStyle = "#ff6b6b";
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     function drawPulses() {
@@ -1387,7 +1655,13 @@
       for (const p of pulses) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 235, 130, ${p.alpha})`;
+        if (p.kind === "heal") {
+          ctx.strokeStyle = `rgba(102, 255, 196, ${p.alpha})`;   // 아군 힐
+        } else if (p.kind === "enemyHeal") {
+          ctx.strokeStyle = `rgba(129, 212, 250, ${p.alpha})`;   // 적 힐
+        } else {
+          ctx.strokeStyle = `rgba(255, 235, 130, ${p.alpha})`;   // 데미지 펄스
+        }
         ctx.lineWidth = 3;
         ctx.stroke();
       }
@@ -1471,11 +1745,13 @@
     }
 
     // ====== 초기화 ======
-    initGridAndPath();
-    initStars();
-    buildTowerBar();
-    resetGame();
-    loop();
+    (function init() {
+      initGridAndPath();
+      initStars();
+      buildTowerBar();
+      resetGame();
+      loop();
+    })();
   </script>
 </body>
 </html>
